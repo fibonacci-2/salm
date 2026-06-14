@@ -30,7 +30,8 @@ checkpointing_freq = 5000
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
 # data_root = f"data/{args.dataset}"
-data_root = f"/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/code/aladdin/data/pretraining/fineweb-twitter-reddit" # for testing --- IGNORE ---
+# data_root = f"/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/code/aladdin/data/pretraining/fineweb-twitter-reddit" # for testing --- IGNORE ---
+data_root= f"data/pretraining/{args.dataset}" # for real run
 @dataclass
 class GPTConfig:
     block_size: int = 512
@@ -264,6 +265,7 @@ class DataLoaderLite:
         assert len(shards) > 0, f"no shards found for split {split}"
         if master_process:
             print(f"found {len(shards)} shards for split {split}")
+            print(f"found those shards at {data_root}")
         self.reset()
 
     def reset(self):

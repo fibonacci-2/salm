@@ -1,16 +1,16 @@
 
-OUTPUT_DIR="outputs/$(date +'%Y%m%d_%H%M%S')"
+OUTPUT_DIR="outputs/reddit-v1"
 mkdir -p "$OUTPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Job ID: $SLURM_JOB_ID"
 echo "Start time: $(date)"
 cp "$0" "$OUTPUT_DIR/training_job.sh"
-
+module load python3
 
 # Run training with torchrun using detected GPU count
 torchrun --standalone --nproc_per_node=4 model.py \
     --output_dir "$OUTPUT_DIR" \
-    --dataset "yt" \
+    --dataset "reddit" \
     > "$OUTPUT_DIR/py-output.txt" 2>&1
 
 
