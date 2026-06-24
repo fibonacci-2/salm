@@ -28,7 +28,7 @@ T = 512                     # sequence length
 # 5 epochs → 9,475 steps  ← recommended for this corpus size
 # 3 epochs → 5,685 steps  ← faster first run to verify loss curve
 # 10 epochs → 18,951 steps ← only if loss still improving at 5
-max_steps = 9475
+max_steps = 18951
 
 checkpointing_freq = 475    # ~20 checkpoints over full run (every ~0.5 epochs)
 
@@ -37,24 +37,25 @@ checkpointing_freq = 475    # ~20 checkpoints over full run (every ~0.5 epochs)
 enc = Tokenizer.from_file("tokenizer/tokenizer/tokenizer.json")
 
 # data_root = f"data/{args.dataset}"
-data_root = "data/pretraining/reddit-youtube"                                         # ← changed: point at your shards
+data_root = "data/pretraining/all"                                         # ← changed: point at your shards
 
 @dataclass
 class GPTConfig:
     block_size: int = 512
     vocab_size: int = 32000                                        # ← changed: 64000 → 32000
-    n_layer: int = 12          
-    n_head: int = 12           
-    n_embd: int = 768  
+# small
+    # n_layer: int = 12          
+    # n_head: int = 12           
+    # n_embd: int = 768  
 
 # medium
     # n_layer: int = 24          
     # n_head: int = 16           
     # n_embd: int = 1024 
 # large
-    # n_layer: int = 36          
-    # n_head: int = 20           
-    # n_embd: int = 1280 
+    n_layer: int = 36          
+    n_head: int = 20           
+    n_embd: int = 1280 
 # largest
     # n_layer: int = 48          
     # n_head: int = 25           

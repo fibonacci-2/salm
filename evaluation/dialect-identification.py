@@ -172,11 +172,15 @@ class GPT(nn.Module):
 
     def get_sentence_embedding(self, idx: torch.Tensor) -> torch.Tensor:
         """
-        Mean-pool the last hidden states over the token dimension.
+        Mean-pool the last hidden states over *non-padding* token positions only.
+        Padding token id is 0 (<pad>); those positions are excluded from the mean.
         Returns shape (B, n_embd).
         """
-        hidden = self.forward(idx)   # (B, T, n_embd)
-        return hidden.mean(dim=1)    # (B, n_embd)
+        hidden = self.forward(idx)                        # (B, T, n_embd)
+        mask   = (idx != 0).unsqueeze(-1).float()         # (B, T, 1)  1=real, 0=pad
+        summed = (hidden * mask).sum(dim=1)               # (B, n_embd)
+        counts = mask.sum(dim=1).clamp(min=1)             # (B, 1)
+        return summed / counts                            # (B, n_embd)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -260,15 +264,19 @@ def extract_embeddings(
     loader: DataLoader,
     device: torch.device,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Extract mean-pooled embeddings from frozen backbone."""
+    """Extract masked mean-pooled embeddings from frozen backbone, L2-normalized."""
     model.eval()
     all_embs, all_labels = [], []
 
     for ids, labels in tqdm(loader, desc="  Extracting embeddings", leave=False):
         ids = ids.to(device)
         with torch.autocast(device_type=device.type, dtype=torch.bfloat16):
-            emb = model.get_sentence_embedding(ids)   # (B, n_embd)
-        all_embs.append(emb.float().cpu().numpy())
+            emb = model.get_sentence_embedding(ids)          # (B, n_embd)
+        emb = emb.float()
+        # L2 normalize: puts all embeddings on unit sphere so linear probe
+        # is scale-invariant and converges faster
+        emb = F.normalize(emb, p=2, dim=-1)
+        all_embs.append(emb.cpu().numpy())
         all_labels.append(labels.numpy())
 
     return np.concatenate(all_embs), np.concatenate(all_labels)
@@ -288,12 +296,21 @@ def train_linear_probe(
     epochs: int,
     batch_size: int,
     device: torch.device,
-    lr: float = 1e-3,
+    lr: float = 1e-2,        # higher LR: embeddings are L2-normed so scale is known
 ) -> dict:
     """
-    Train a linear probe on pre-extracted embeddings.
-    Returns dict of metrics.
+    Train a linear probe on pre-extracted L2-normalized embeddings.
+
+    Key fixes vs original:
+      - class-weighted CrossEntropyLoss to counter majority-class collapse
+      - higher default LR (1e-2 vs 1e-3) appropriate for normalized features
+      - majority-class baseline reported for comparison
     """
+    # ── majority class baseline ──
+    from collections import Counter
+    majority_class = Counter(y_train).most_common(1)[0][0]
+    majority_acc   = (y_test == majority_class).mean()
+
     X_tr = torch.tensor(X_train, dtype=torch.float32)
     y_tr = torch.tensor(y_train, dtype=torch.long)
     X_te = torch.tensor(X_test,  dtype=torch.float32)
@@ -302,9 +319,15 @@ def train_linear_probe(
     tr_ds = torch.utils.data.TensorDataset(X_tr, y_tr)
     tr_dl = DataLoader(tr_ds, batch_size=batch_size, shuffle=True)
 
+    # class weights: inverse frequency, so minority cities aren't ignored
+    counts      = np.bincount(y_train, minlength=n_classes).astype(np.float32)
+    counts      = np.where(counts == 0, 1, counts)     # avoid div-by-zero
+    weights     = torch.tensor(1.0 / counts).to(device)
+    weights     = weights / weights.sum() * n_classes   # normalize
+
     probe     = LinearProbe(n_embd, n_classes).to(device)
     optimizer = torch.optim.AdamW(probe.parameters(), lr=lr, weight_decay=1e-4)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=weights)
 
     best_acc   = 0.0
     best_state = None
@@ -318,7 +341,6 @@ def train_linear_probe(
             loss.backward()
             optimizer.step()
 
-        # validation accuracy
         probe.eval()
         with torch.no_grad():
             logits = probe(X_te.to(device))
@@ -329,19 +351,22 @@ def train_linear_probe(
             best_acc   = acc
             best_state = {k: v.clone() for k, v in probe.state_dict().items()}
 
-    # final evaluation with best state
     probe.load_state_dict(best_state)
     probe.eval()
     with torch.no_grad():
-        logits     = probe(X_te.to(device))
-        preds      = logits.argmax(dim=-1).cpu().numpy()
+        logits = probe(X_te.to(device))
+        preds  = logits.argmax(dim=-1).cpu().numpy()
 
-    city_acc  = (preds == y_test).mean()
+    city_acc = (preds == y_test).mean()
+    print(f"    Majority baseline : {majority_acc:.4f} ({majority_acc*100:.1f}%)")
+    print(f"    Probe accuracy    : {city_acc:.4f} ({city_acc*100:.1f}%)  "
+          f"[+{(city_acc - majority_acc)*100:.1f}pp vs baseline]")
 
     return {
-        "city_acc"  : city_acc,
-        "preds"     : preds,
-        "targets"   : y_test,
+        "city_acc"       : city_acc,
+        "majority_acc"   : majority_acc,
+        "preds"          : preds,
+        "targets"        : y_test,
     }
 
 
@@ -426,10 +451,11 @@ def evaluate_checkpoint(
                    if city in report}
 
     return {
-        "checkpoint" : Path(ckpt_path).name,
-        "step"       : step,
-        "city_acc"   : metrics['city_acc'],
-        "region_acc" : region_acc,
+        "checkpoint"   : Path(ckpt_path).name,
+        "step"         : step,
+        "city_acc"     : metrics['city_acc'],
+        "majority_acc" : metrics['majority_acc'],
+        "region_acc"   : region_acc,
         **{f"f1_{city}": f1 for city, f1 in per_city_f1.items()},
     }
 
@@ -444,11 +470,11 @@ def parse_args():
     )
     p.add_argument("--madar",       default="../data/eval/madar_combined.tsv",
                    help="Path to MADAR TSV file")
-    p.add_argument("--checkpoints", default="../outputs/salm-small/log",
+    p.add_argument("--checkpoints", default="../outputs/salm-large/log",
                    help="Directory containing model_*.pt checkpoint files")
     p.add_argument("--tokenizer",   default="../tokenizer/tokenizer/tokenizer.json",
                    help="Path to tokenizer.json")
-    p.add_argument("--output",      default="dialect-idenfitication-results.csv",
+    p.add_argument("--output",      default="da-results-salm-large.csv",
                    help="Path to write results CSV")
     p.add_argument("--epochs",      type=int, default=10,
                    help="Linear probe training epochs")
@@ -535,14 +561,14 @@ def main():
     df = pd.DataFrame(all_results).sort_values("step")
 
     print(f"\n{'═'*60}")
-    print("Results summary (city-level and region-level accuracy):")
-    print(df[["checkpoint", "step", "city_acc", "region_acc"]].to_string(index=False))
+    print("Results summary:")
+    print(df[["checkpoint", "step", "majority_acc", "city_acc", "region_acc"]].to_string(index=False))
 
-    # best checkpoint
     best = df.loc[df["city_acc"].idxmax()]
     print(f"\nBest checkpoint : {best['checkpoint']}")
-    print(f"  City accuracy  : {best['city_acc']*100:.1f}%")
-    print(f"  Region accuracy: {best['region_acc']*100:.1f}%")
+    print(f"  Majority baseline : {best['majority_acc']*100:.1f}%")
+    print(f"  City accuracy     : {best['city_acc']*100:.1f}%")
+    print(f"  Region accuracy   : {best['region_acc']*100:.1f}%")
 
     # ── save CSV ──
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)

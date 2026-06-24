@@ -1,0 +1,33 @@
+******************training
+B: 8. T: 512. world size: 1. 
+B: 8. T: 512. world size: 1. 
+total desired batch size: 131072
+=> calculated gradient accumulation steps: 32
+reading shards from data/pretraining/all
+found 102 shards for split train
+found those shards at data/pretraining/all
+reading shards from data/pretraining/all
+found 3 shards for split val
+found those shards at data/pretraining/all
+num decayed parameter tensors: 146, with 749,404,160 parameters
+num non-decayed parameter tensors: 290, with 601,600 parameters
+using fused AdamW: True
+validation loss: 10.6174
+saving model
+step     0 | loss: 10.617110 | lr 1.9048e-06 | norm: 40.7400 | dt: 9784.74ms | tok/sec: 13395.56
+step     1 | loss: 9.992228 | lr 3.8095e-06 | norm: 25.7173 | dt: 5238.19ms | tok/sec: 25022.39
+step     2 | loss: 9.533302 | lr 5.7143e-06 | norm: 14.2313 | dt: 5253.75ms | tok/sec: 24948.27
+step     3 | loss: 9.379377 | lr 7.6190e-06 | norm: 18.6688 | dt: 5263.62ms | tok/sec: 24901.51
+step     4 | loss: 9.302711 | lr 9.5238e-06 | norm: 13.7869 | dt: 5274.28ms | tok/sec: 24851.15
+step     5 | loss: 9.262216 | lr 1.1429e-05 | norm: 23.6920 | dt: 5285.91ms | tok/sec: 24796.49
+step     6 | loss: 9.185720 | lr 1.3333e-05 | norm: 12.8498 | dt: 5289.42ms | tok/sec: 24780.05
+step     7 | loss: 9.109687 | lr 1.5238e-05 | norm: 7.2370 | dt: 5297.40ms | tok/sec: 24742.69
+step     8 | loss: 8.987925 | lr 1.7143e-05 | norm: 5.9824 | dt: 5308.59ms | tok/sec: 24690.55
+step     9 | loss: 9.075187 | lr 1.9048e-05 | norm: 14.8162 | dt: 5319.28ms | tok/sec: 24640.93
+step    10 | loss: 9.072814 | lr 2.0952e-05 | norm: 11.7911 | dt: 5307.61ms | tok/sec: 24695.13
+step    11 | loss: 9.028166 | lr 2.2857e-05 | norm: 5.5460 | dt: 5299.00ms | tok/sec: 24735.23
+step    12 | loss: 8.958771 | lr 2.4762e-05 | norm: 3.5912 | dt: 5299.71ms | tok/sec: 24731.90
+step    13 | loss: 8.859120 | lr 2.6667e-05 | norm: 1.7330 | dt: 5306.24ms | tok/sec: 24701.47
+step    14 | loss: 8.887219 | lr 2.8571e-05 | norm: 6.0323 | dt: 5308.78ms | tok/sec: 24689.68
+step    15 | loss: 8.807610 | lr 3.0476e-05 | norm: 4.1975 | dt: 5311.03ms | tok/sec: 24679.21
+step    16 | loss: 8.799000 | lr 3.2381e-05 | norm: 4.2014 | dt: 5317.26ms | tok/sec: 24650.28
